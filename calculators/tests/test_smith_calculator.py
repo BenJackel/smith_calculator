@@ -1,0 +1,2 @@
+import pytest
+from calculators.smith_calculator.smith_calculator import SmithCalculator

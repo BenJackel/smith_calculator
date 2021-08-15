@@ -1,2 +1,10 @@
 smith\
 .vscode\
+*.egg-info\
+calculators/investment_calculator/__pycache__/
+
+calculators/mortgage_calculator/__pycache__/
+
+calculators/smith_calculator/__pycache__/
+
+calculators/tests/__pycache__/
