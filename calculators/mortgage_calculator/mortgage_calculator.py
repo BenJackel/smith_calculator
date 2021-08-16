@@ -78,7 +78,7 @@ class MortgageCalculator:
         return round(self.equity_available - self.principle, 2)
 
     def calculate_credit_available(self):
-        return self.credit_limit - self.credit_balance
+        return round(self.credit_limit - self.credit_balance, 2)
 
     def calculate_interest_and_principle(self):
         semi_annual_rate = self.interest_rate / 100.0 / 2
@@ -140,7 +140,7 @@ class MortgageCalculator:
         return self
 
     def capitalize_heloc_interest(self):
-        interest = self.heloc_interest_rate / 100 / 12.0 * self.credit_balance
+        interest = round(self.heloc_interest_rate / 100 / 12.0 * self.credit_balance, 2)
         if interest > self.credit_available:
             raise ValueError(
                 "Can not capitalize interest. Not enough credit available."
