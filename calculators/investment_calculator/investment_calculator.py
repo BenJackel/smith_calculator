@@ -1,7 +1,6 @@
 from datetime import date
 import pandas as pd
 import numpy as np
-from pandas.tseries.offsets import Milli
 
 
 class InvestmentCalculator:

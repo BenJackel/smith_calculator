@@ -41,8 +41,31 @@ class MortgageCalculator:
         df = self.data()
         return repr(df)
 
-    def next_payment_date(self):
-        return self.last_payment_date + pd.Timedelta("14 days")
+    def heloc_payment_date(self, current_date):
+        """
+        HELOC interest is due at the end of every month
+        """
+        date = pd.to_datetime(current_date)
+        return date + pd.DateOffset(day=31)
+
+    def mortgage_payment_date(self, current_date):
+        date = pd.to_datetime(current_date)
+        dr = pd.date_range(
+            self.last_payment_date, date + pd.DateOffset(months=2), freq="d"
+        ).to_frame()
+
+        if self.payment_frequency in ["monthly"]:
+            day = self.last_payment_date.day
+            dr = dr.resample("m").first().dropna()
+            dr = dr.apply(lambda x: x + pd.DateOffset(day=day))
+
+        if self.payment_frequency in ["weekly", "accelerated weekly"]:
+            dr = dr.resample("7 d").first().dropna()
+
+        if self.payment_frequency in ["bi-weekly", "accelerated bi-weekly"]:
+            dr = dr.resample("14 d").first().dropna()
+
+        return dr[dr >= date][0].min()
 
     def data(self):
         df = pd.DataFrame(
@@ -50,7 +73,6 @@ class MortgageCalculator:
                 "principle": [self.principle],
                 "interest_rate": self.interest_rate,
                 "payment_amount": self.payment_amount,
-                "next_payment_date": self.next_payment_date(),
             }
         )
         return df
@@ -75,7 +97,7 @@ class MortgageCalculator:
         return round(payment * num / denom, 2)
 
     def calculate_heloc_credit_limit(self):
-        return round(self.equity_available - self.principle, 2)
+        return round(self.equity_available * 0.8 - self.principle, 2)
 
     def calculate_credit_available(self):
         return round(self.credit_limit - self.credit_balance, 2)
@@ -99,24 +121,31 @@ class MortgageCalculator:
         interest_payment, principle_payment = self.calculate_interest_and_principle()
         self.principle -= principle_payment
         self.credit_limit = self.calculate_heloc_credit_limit()
+        self.credit_available = self.calculate_credit_available()
         return self
 
     def make_double_up_payment(self, amount=0):
         # Need to check if amount > 0 and < payment_amount
-        if amount < 0 or amount > self.payment_amount:
-            raise ValueError("Amount needs to be > 0 and < payment amount")
+        if amount < 0:
+            raise ValueError(f"Amount needs to be > 0. Got: {amount}")
+        if amount > self.payment_amount:
+            raise ValueError(f"Amount needs to < payment amount. Got {amount}")
 
         self.principle -= amount
         self.credit_limit = self.calculate_heloc_credit_limit()
+        self.credit_available = self.calculate_credit_available()
         return self
 
     def make_lump_sum_payment(self, amount=0):
         # Need to check if amount > 0 and < 10% of equity
         if amount < 0 or amount > self.equity_available * 0.1:
-            raise ValueError("Amount needs to be > 0 and < 10% of equity")
+            raise ValueError(
+                f"Amount needs to be > 0 and < 10% of equity, got {amount}"
+            )
 
         self.principle -= amount
         self.credit_limit = self.calculate_heloc_credit_limit()
+        self.credit_available = self.calculate_credit_available()
         return self
 
     def draw_from_heloc(self, amount):
@@ -129,6 +158,10 @@ class MortgageCalculator:
         self.credit_available = self.calculate_credit_available()
         return self
 
+    def heloc_interest_due(self):
+        rate = self.heloc_interest_rate / 100 / 12.0
+        return round(rate * self.credit_balance, 2)
+
     def make_heloc_payment(self, amount):
         if amount < 0:
             raise ValueError("Can't make a negative payment")
@@ -140,14 +173,14 @@ class MortgageCalculator:
         return self
 
     def capitalize_heloc_interest(self):
-        interest = round(self.heloc_interest_rate / 100 / 12.0 * self.credit_balance, 2)
+        interest = self.heloc_interest_due()
         if interest > self.credit_available:
             raise ValueError(
                 "Can not capitalize interest. Not enough credit available."
             )
 
         self.draw_from_heloc(interest)
-        return self
+        return interest
 
 
 if __name__ == "__main__":
@@ -164,7 +197,7 @@ if __name__ == "__main__":
 
         mortgage = MortgageCalculator(
             principle=500000,
-            equity_available=500000 / 0.8,
+            equity_available=800000,
             amortization_months=25 * 12,
             interest_rate=2.5,
             heloc_interest_rate=3.0,
@@ -175,3 +208,15 @@ if __name__ == "__main__":
         print(
             freq, mortgage.payment_amount, mortgage.calculate_interest_and_principle()
         )
+
+    mortgage = MortgageCalculator(
+        principle=500000,
+        equity_available=800000,
+        amortization_months=25 * 12,
+        interest_rate=2.5,
+        heloc_interest_rate=3.0,
+        payment_freqency="monthly",
+        last_payment_date="2021-08-10",
+    )
+
+    print(mortgage.mortgage_payment_date("2021-08-09"))
